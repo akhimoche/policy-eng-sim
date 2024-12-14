@@ -10,31 +10,20 @@ def get_general_info(dict_of_states):
 def get_dynamic_info(dict_of_states):
     """
     Gets dynamic info such as agents' positions and coin
-    positions from a dictionary of states, consolidating keys
-    that end with directions (north, south, east, west).
+    positions from a dictionary of states by removing the
+    wall/ground keys and assoc. values
     """
     keys_to_avoid = {'wall', 'ground'}
-    directions = {'north', 'south', 'east', 'west'}
     sub_dict = {}
 
+    # Iterate over the items in dict_of_states
     for key, value in dict_of_states.items():
-        # Skip keys to avoid
-        if key in keys_to_avoid:
-            continue
-
-        # Normalize the key by removing direction suffixes
-        key_parts = key.split('_')
-        if key_parts[-1] in directions:
-            norm_key = '_'.join(key_parts[:-1])  # Remove the direction part
-        else:
-            norm_key = key
-
-        # Consolidate values for normalized keys
-        if norm_key not in sub_dict:
-            sub_dict[norm_key] = []
-        sub_dict[norm_key].extend(value)
+        # If the key is not in the keys_to_avoid set, add it to sub_dict
+        if key not in keys_to_avoid:
+            sub_dict[key] = value
 
     return sub_dict
+
 
 def get_changes_symm(dict_of_states_0, dict_of_states_1):
     """ Takes two successive timesteps dictionaries, remove
@@ -76,6 +65,8 @@ def get_changes_diff(dict_of_states_0, dict_of_states_1):
 
         # Find differences in set_b compared to set_a
         diff = set_b - set_a
+
+
         if diff:
             differences[key] = list(diff)
 
@@ -92,7 +83,13 @@ def dynamic_process(dict_of_dicts):
         pre = dict_of_dicts[f"Timestep {t}"]
         post = dict_of_dicts[f"Timestep {t+1}"]
         diff = get_changes_diff(pre, post)
-        process_dict[f"a_{t}"] = diff
+
+        # delete those cases where social welfare is zero
+        if 'social_welfare' in diff and diff['social_welfare'] == [0.0]:
+            diff.pop('social_welfare', None)
+
+        process_dict[f"t_{t+1}"] = diff
+
 
     return process_dict
 
