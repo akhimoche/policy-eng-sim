@@ -1,7 +1,10 @@
 import heapq
+import numpy as np
 
 def a_star(start: tuple, goal: tuple, obstacles: dict, grid_size: tuple):
-
+    """Perform A* search for shortest path between start and goal indices given
+    some obstacles to avoid.
+    """
     # Define our heuristic h(x)
     def heuristic(a, b):
         return abs(a[0] - b[0]) + abs(a[1] - b[1])
@@ -52,22 +55,27 @@ def get_north(orientation: str):
     """Rotates an agent to north given initial orientation"""
 
     if orientation == "north":
-        action = "noop"
+        action = 0 #"noop"
+        new_orientation = "north"
 
     if orientation == "east":
-        action = "turn_left"
+        action = 5 #"turn_left"
+        new_orientation = "north"
 
     if orientation == "south":
-        action = "turn_left"
+        action = 5 #"turn_left"
+        new_orientation = "east"
 
     if orientation == "west":
-        action = "turn_right"
+        action = 6 #"turn_right"
+        new_orientation = "north"
 
-    return action
+    return action, new_orientation
 
 def move_agent(coord_init: tuple, coord_final: tuple):
     """ Given two coordinates, select the appropriate action
-        to move from coord_init to coord_final"""
+        to move from coord_init to coord_final. All actions
+        are relative to north (call get_north before using)."""
 
     # If same row but coord_final is to the left of coord_init...
     if coord_init[0] == coord_final[0] and coord_init[1] > coord_final[1]:
@@ -87,14 +95,36 @@ def move_agent(coord_init: tuple, coord_final: tuple):
 
     return move_action
 
-# Test algorithm
-start = (0, 0)
-goal = (5, 5)
-obstacles = {(1,1),(0,1),(2,2),(2,4),(2,5)}  # Blocked positions on the grid
-path = a_star(start, goal, obstacles, (6,6))
-print(path)
+def get_movement_actions(prompt, colour_dict, num_players):
+    """ Gets movement actions for each agent by calling
+    A* search on the tuple designated by the prompt.
+    Prompt is a dictionary with a key each agent colour
+    that maps to a tuple (initial, final, obstacles)
+    of coordinates which are fed into A*. The first leg of the
+    located path is used. Prompt should be in dictionary form.
+    """
+    move_actions = np.zeros((num_players),dtype=int)
 
-for i in range(len(path)-1):
-    coord1 = path[i]
-    coord2 = path[i+1]
-    print(move_agent(coord1,coord2))
+    # do A* search for each agent using prompt
+    for i in range(num_players):
+        agent_colour = colour_dict[i] # get colour from index
+        search_tuple = prompt[agent_colour] # (init, fin, obst)
+        path = a_star(search_tuple)  # get path from init to fin
+        coords_i = path[0], path[1] # we only want the first move
+        move_i = move_agent(path[0], path[1])
+
+
+    return move_actions
+
+
+# Test algorithm
+# start = (0, 0)
+# goal = (5, 5)
+# obstacles = {(1,1),(0,1),(2,2),(2,4),(2,5)}  # Blocked positions on the grid
+# path = a_star(start, goal, obstacles, (6,6))
+# print(path)
+
+# for i in range(len(path)-1):
+#     coord1 = path[i]
+#     coord2 = path[i+1]
+#     print(move_agent(coord1,coord2))

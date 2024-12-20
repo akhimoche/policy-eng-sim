@@ -498,7 +498,7 @@ def build(
   assert len(roles) == MANDATED_NUM_PLAYERS, "Wrong number of players"
   # Randomly choose colors.
   coin_type_a, coin_type_b = random.sample(tuple(COIN_PALETTES), k=2)
-
+  player_color_mapping = {0: coin_type_a, 1: coin_type_b}
   # Manually build avatar config.
   num_players = len(roles)
   player_color_palettes = get_player_color_palettes(
