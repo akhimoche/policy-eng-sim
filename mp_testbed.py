@@ -69,7 +69,7 @@ while not north_found:
 # ---- Rotate all players north  ----- #
 
 # print(colour_dict)
-print(orientation_dict)
+# print(orientation_dict)
 # print(position_dict)
 
 done = False
@@ -77,9 +77,7 @@ t=0
 window_size = 10
 while not done:
     # Example: random actions for each agent
-    #actions = np.random.randint(action_min,action_max+1, num_players)
-    #actions = np.zeros((num_players), dtype =int)
-    actions = np.array([0,1])
+    actions = np.random.randint(action_min,action_max+1, num_players)
     # Step through the environment
     timestep = env.step(actions)
 
@@ -88,8 +86,10 @@ while not done:
 
     # Get dictionary of states from world RGB frame
     processed = converter.image_to_state(screen_frame)['global']
-    plt.imshow(screen_frame)
-    plt.show()
+
+    # plt.imshow(screen_frame)
+    # plt.show()
+
     # total system reward is social welfare
     processed["social_welfare"] = [sum(timestep.reward).item()] # turn into list for iteration in get_dynamic info
 
