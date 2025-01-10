@@ -95,24 +95,23 @@ def move_agent(coord_init: tuple, coord_final: tuple):
 
     return move_action
 
-def get_movement_actions(prompt, colour_dict, num_players):
+def get_movement_actions(operator_output, colour_dict, num_players):
     """ Gets movement actions for each agent by calling
-    A* search on the tuple designated by the prompt.
-    Prompt is a dictionary with a key each agent colour
+    A* search on the tuple designated by the operator_output.
+    operator_output is a dictionary with a key each agent colour
     that maps to a tuple (initial, final, obstacles)
     of coordinates which are fed into A*. The first leg of the
-    located path is used. Prompt should be in dictionary form.
+    located path is used. operator_output should be in dictionary form.
     """
     move_actions = np.zeros((num_players),dtype=int)
 
-    # do A* search for each agent using prompt
+    # do A* search for each agent using operator_output
     for i in range(num_players):
         agent_colour = colour_dict[i] # get colour from index
-        search_tuple = prompt[agent_colour] # (init, fin, obst)
+        search_tuple = operator_output[agent_colour] # (init, fin, obst)
         path = a_star(search_tuple)  # get path from init to fin
         coords_i = path[0], path[1] # we only want the first move
         move_i = move_agent(path[0], path[1])
-
 
     return move_actions
 
