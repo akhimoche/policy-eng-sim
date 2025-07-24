@@ -1,0 +1,23 @@
+# Ignore Python cache files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+__pycache__/
+*.py[cod]
+
+# VS Code settings (optional)
+.vscode/
+
+# System metadata (Mac/Windows)
+.DS_Store
+Zone.Identifier
+
+# Ignore logs or output
+*.log
+
+# Jupyter notebook checkpoints (if any)
+.ipynb_checkpoints/
+
+
+
