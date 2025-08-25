@@ -28,12 +28,14 @@ from utils.operator_funcs import get_north     # used for calibration; keep if y
 
 from agents.random_agent import RandomAgent
 from agents.selfish import SelfishAgent
+from utils.norms.registry import load_norm
+
 
 
 # === Config ===
 env_name      = "commons_harvest__open"
 num_players   = 5
-window_size   = 50
+window_size   = 100
 interactive   = True  # True/False
 
 # === Env setup ===
@@ -107,16 +109,19 @@ agent_types = [
     SelfishAgent       # agent 4
 ]
 
+norm = load_norm("dummy_col_band:MiddleColumnBandForbidden")  # swap this string to swap norms
+
 agents = []
 for i, AgentClass in enumerate(agent_types):
     if AgentClass is SelfishAgent:
         agents.append(AgentClass(
             i, a_min, a_max, converter, colour_dict[i],
             use_norms=True,           # <— turn on/off
-            epsilon=0.1,              # try 10% ignore rate; sweep later (0.0-> never ignore, 1.0-> always ignore norm)
+            epsilon=0,              # try 10% ignore rate; (0.0-> never ignore, 1.0-> always ignore norm)
             reserve_K=3,              # from substrate analysis
             reserve_radius=2.0,
-            norm_penalty=10.0 #increase to improve compliance 
+            norm_penalty=20.0, #increase to improve compliance (5-10 would be the default)
+            norm=norm
         ))
     else:
         agents.append(AgentClass(i, a_min, a_max))

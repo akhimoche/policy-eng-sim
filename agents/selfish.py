@@ -24,8 +24,11 @@ from .base_agent import BaseAgent, ACTION_MAP
 from typing import Dict, List, Tuple, Optional, Set
 import numpy as np
 
+# NOTE: we import BOTH versions of A*: vanilla and the one with optional norm hooks.
 from utils.operator_funcs import a_star as op_a_star, a_star_with_norms
-from utils.norms.growth_reserve_local import GrowthReserveLocal
+
+# Import only the interface for norms; the concrete norm is injected from the runner.
+from utils.norms.base import NormSpec
 
 # Translation-only actions (move in the grid without turning or zapping).
 # These correspond to:
@@ -39,6 +42,12 @@ class SelfishAgent(BaseAgent):
       - Finds the nearest reachable apple using A* search.
       - Takes the first step along the optimal path.
       - If no apple is reachable, chooses a random movement action.
+
+    Norm wiring (optional):
+      - When `use_norms=True`, pathfinding consults two *generic* callbacks:
+          * hard_blocked(agent_id, cell) -> bool      # treat like a wall (spatial or temporal)
+          * soft_penalty(agent_id, cur, nxt) -> float # add extra step cost (>=0)
+        This *does not* bake any specific norm into core code; it’s inversion of control.
     """
 
     def __init__(
@@ -50,14 +59,16 @@ class SelfishAgent(BaseAgent):
         color: str,      # Agent's color label from calibration (e.g., "red")
         seed: int | None = None,
         # ---- optional norm wiring (defaults keep behavior identical to before) ----
-        use_norms: bool = False,          # enable the soft local-reserve norm
-        reserve_K: int = 3,               # K_local: keep >= 3 apples within L2 radius
-        reserve_radius: float = 2.0,      # L2 radius used by the substrate
-        norm_penalty: float = 5.0,        # step penalty when breaching the rule
-        epsilon: float = 0.0              # ε-compliance: prob. to ignore soft penalty
+        use_norms: bool = False,          # enable norm-aware planning
+        reserve_K: int = 3,               # (kept for compatibility; ignored if norm is injected)
+        reserve_radius: float = 2.0,      # (kept for compatibility; ignored if norm is injected)
+        norm_penalty: float = 5.0,        # (kept for compatibility; ignored if norm is injected)
+        epsilon: float = 0.0,             # ε-compliance: prob. to ignore soft penalty
+        norm: Optional[NormSpec] = None   # injected norm implementation (preferred)
     ):
-        # Call BaseAgent constructor to set RNG, action map, etc.
+        # Base class sets RNG and action map
         super().__init__(agent_id, seed=seed, action_map=ACTION_MAP)
+
         # Store agent-specific info
         self.agent_id = agent_id
         self.action_min = int(action_min)
@@ -65,12 +76,22 @@ class SelfishAgent(BaseAgent):
         self.converter = converter
         self.color = color
 
-        # --- Optional norm (soft local reserve: leave >= K apples within L2=radius) ---
+        # --- Optional norm (injected) ---
         self.use_norms = bool(use_norms)
-        self.norm = GrowthReserveLocal(
-            radius=reserve_radius, K=reserve_K, penalty=norm_penalty, seed=seed or 0
-        )
-        self.norm.set_epsilon(str(self.id), float(epsilon))
+        self.norm: Optional[NormSpec] = norm
+
+        # If norms are enabled, ensure we have one and set ε if the norm supports it
+        if self.use_norms:
+            if self.norm is None:
+                # You chose norm-aware planning but did not inject a norm from the runner.
+                # We raise here to make the wiring error explicit instead of silently falling back.
+                raise ValueError("SelfishAgent(use_norms=True) requires an injected `norm` implementing NormSpec.")
+            if hasattr(self.norm, "set_epsilon"):
+                try:
+                    self.norm.set_epsilon(str(self.id), float(epsilon))  # type: ignore[attr-defined]
+                except Exception:
+                    # If a norm chooses not to implement epsilon, ignore quietly.
+                    pass
 
     # ----------------------------------------------------------------
     # HELPER: Convert observation frame → symbolic state dictionary
@@ -82,7 +103,7 @@ class SelfishAgent(BaseAgent):
 
         Returns:
             state: dict mapping object labels (e.g., "apple", "wall", "p_red_north")
-                   to lists of (x, y) positions on the grid.
+                   to lists of (row, col) positions on the grid.
         """
         frame = obs.observation[0]["WORLD.RGB"]
         state = self.converter.image_to_state(frame)["global"]
@@ -104,7 +125,7 @@ class SelfishAgent(BaseAgent):
         return out
 
     # ----------------------------------------------------------------
-    # HELPER: Calculate grid size (width, height) from state
+    # HELPER: Calculate grid size (rows, cols) from state
     # ----------------------------------------------------------------
     @staticmethod
     def _grid_size(state: Dict[str, List[Tuple[int, int]]]) -> Tuple[int, int]:
@@ -112,13 +133,13 @@ class SelfishAgent(BaseAgent):
         Determines the grid dimensions from all positions in the state.
         Needed for bounds-checking in A*.
         """
-        max_x = 0
-        max_y = 0
+        max_r = 0
+        max_c = 0
         for positions in state.values():
-            for x, y in positions:
-                if x > max_x: max_x = x
-                if y > max_y: max_y = y
-        return (max_x + 1, max_y + 1)  # +1 because coordinates are 0-indexed
+            for r, c in positions:
+                if r > max_r: max_r = r
+                if c > max_c: max_c = c
+        return (max_r + 1, max_c + 1)  # +1 because coordinates are 0-indexed
 
     # ----------------------------------------------------------------
     # MAIN: Decide what action to take this step
@@ -130,9 +151,14 @@ class SelfishAgent(BaseAgent):
           2. Find own position by matching color label.
           3. Identify all apple positions.
           4. Identify obstacles (walls, trees).
-          5. Run A* to find nearest reachable apple.
-          6. If no path exists, move randomly.
-          7. If path exists, take the first step toward the apple.
+          5. Plan to each candidate apple; pick the minimal effective cost:
+               steps + (expected final-step penalty if norms enabled)
+          6. Execute the first step on the chosen path; fallback random if no path.
+
+        NOTE on norms:
+          - We update the norm’s apple set each step (old API) so it has read-only context.
+          - When `use_norms=True`, we call `a_star_with_norms` and pass the two norm callbacks.
+          - This keeps core planner generic while allowing spatial/temporal rules via hooks.
         """
         # Step 1: Get symbolic map of the world
         state = self._symbolic_state(obs)
@@ -160,31 +186,35 @@ class SelfishAgent(BaseAgent):
         # Step 5: Compute grid size
         grid_size = self._grid_size(state)
 
-        # (Norm hook) keep the norm's apple set up to date
-        self.norm.update_apples(set(apples))
+        # (Norm hook context) keep the norm's apple set up to date (old API; fine for now)
+        # This gives the norm read-only knowledge of where apples currently are.
+        if self.use_norms and self.norm is not None and hasattr(self.norm, "update_apples"):
+            try:
+                self.norm.update_apples(set(apples))  # type: ignore[attr-defined]
+            except Exception:
+                pass
 
-         # Step 6: Find best apple by effective cost = steps + expected penalty
-        best_path = None
+        # Step 6: Evaluate each apple by "effective cost" and keep the best path.
+        best_path: Optional[List[Tuple[int, int]]] = None
         best_score = float("inf")
         eid = str(self.id)
 
         for goal in apples:
-            # If norms are ON and ε == 0, skip apples that would breach K.
-            # This makes ε=0 behave "almost hard" so the effect is obvious.
-            if self.use_norms and self.norm.epsilon_by_agent.get(eid, 0.0) == 0.0:
-                if self.norm.would_breach(goal):
-                    continue
-
-            # Plan a path to this apple
-            if self.use_norms:
+            # Plan a path to this apple.
+            if self.use_norms and self.norm is not None:
+                # Norm-aware planning: planner consults optional hooks.
                 path = a_star_with_norms(
-                    start, goal, obstacles, grid_size,
+                    start=start,
+                    goal=goal,
+                    obstacles=obstacles,
+                    grid_size=grid_size,
                     agent_id=eid,
                     norms_active=True,
-                    norms_blocked=self.norm.is_blocked,     # always False in soft version
-                    norms_penalty=self.norm.step_penalty
+                    norms_blocked=getattr(self.norm, "hard_blocked", lambda *_: False),
+                    norms_penalty=getattr(self.norm, "soft_penalty", lambda *_: 0.0),
                 )
             else:
+                # Vanilla planning (identical to your previous behavior)
                 path = op_a_star(start, goal, obstacles, grid_size)
 
             # Treat [] or a 1-node path as "no usable path"
@@ -194,12 +224,15 @@ class SelfishAgent(BaseAgent):
             # Base cost = number of steps (edges)
             base_steps = len(path) - 1
 
-            # Add expected penalty for the *final step* into the apple (deterministic)
-            if self.use_norms:
-                exp_pen = self.norm.expected_step_penalty(eid, path[-2], path[-1])
-                score = base_steps + exp_pen
-            else:
-                score = base_steps
+            # Add expected penalty for the *final step* into the apple (deterministic) if provided
+            exp_pen = 0.0
+            if self.use_norms and self.norm is not None and hasattr(self.norm, "expected_step_penalty"):
+                try:
+                    exp_pen = float(self.norm.expected_step_penalty(eid, path[-2], path[-1]))  # type: ignore[attr-defined]
+                except Exception:
+                    exp_pen = 0.0
+
+            score = base_steps + exp_pen
 
             # Keep the best (lowest) effective score
             if score < best_score:
@@ -210,16 +243,21 @@ class SelfishAgent(BaseAgent):
         if not best_path or len(best_path) < 2:
             return int(self.rng.choice(FALLBACK_TRANSLATIONS))
 
-        # Step 8: Take the first step toward the apple
-        next_step = best_path[1]
-        dx = next_step[0] - start[0]
-        dy = next_step[1] - start[1]
+        # Step 8: Take the first step toward the apple (map delta to action id)
+        start_r, start_c = start
+        next_r, next_c = best_path[1]
+        dr = next_r - start_r
+        dc = next_c - start_c
 
-        # Map delta (dx, dy) to discrete action ID
-        if dy == -1:   action_id = 1  # FORWARD (north)
-        elif dy == 1:  action_id = 2  # BACKWARD (south)
-        elif dx == -1: action_id = 3  # STEP_LEFT (west)
-        elif dx == 1:  action_id = 4  # STEP_RIGHT (east)
-        else:          action_id = int(self.rng.choice(FALLBACK_TRANSLATIONS))
+        if dc == -1:
+            action_id = 1  # FORWARD (north)
+        elif dc == 1:
+            action_id = 2  # BACKWARD (south)
+        elif dr == -1:
+            action_id = 3  # STEP_LEFT (west)
+        elif dr == 1:
+            action_id = 4  # STEP_RIGHT (east)
+        else:
+            action_id = int(self.rng.choice(FALLBACK_TRANSLATIONS))  # safety fallback
 
         return action_id

@@ -1,4 +1,6 @@
 # Minimal, cross-platform deps to run Commons Harvest Open and this branch.
+# Tried to add the additional requirements, but not sure if it will work for a fresh user, 
+# please just let me knwo if you get any errors and I will update this
 
 # Core
 numpy>=1.24
@@ -12,8 +14,8 @@ absl-py>=1.4.0
 
 # Melting Pot stack
 dm-env>=1.6
-dmlab2d>=1.5
-meltingpot>=2.3
+dmlab2d==1.0.*           # <-- was >=1.5; 1.0.* is what exists for Py3.11/mac
+dm-meltingpot==2.3.*     # keep compatible with dmlab2d 1.0.*
 chex>=0.1.85
 
 # TensorFlow (only if you actually need it)
