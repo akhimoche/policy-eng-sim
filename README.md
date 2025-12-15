@@ -7,4 +7,9 @@ You first need to have **Python 3.11.9** installed. You can check this is the ca
 ```bash
 pip install -r requirements.txt
 ```
-
+TO DO:
+- Clean up ReadME with clear description of installation, file structure and scope of project
+- Need to clarify what precisely the objective of project is on paper (robust meta norms? cross environment performance? Framework for optimising norms?)
+- LLM needs to be linked into the simualtion for seamless integration of meta norm generated
+- Need data clearly showing comparison of norm against heuristic
+- Need to implement independent RL agent / altruistic agent baseline
