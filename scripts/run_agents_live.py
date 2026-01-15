@@ -29,7 +29,7 @@ matplotlib.use("TkAgg")
 # Also, suggestion to log these under a @dataclass? class ExperimentConfig: ... overkill? 
 env_name = "commons_harvest__open"
 num_players = 5
-window_size = 1000 # Agreed upon standard for exeperiments is 1000 timesteps. 
+window_size = 200 # Agreed upon standard for exeperiments is 1000 timesteps. 
 interactive = True  # Debug tool - compartmentalize later
 save_data = False  # Set to True to save experiment data to data/ folder
 
@@ -38,9 +38,9 @@ agent_types = [SelfishAgent] * num_players
 
 # Norm configuration - SELECT YOUR NORM HERE
 # Available norms: Use utils.norms.loader.print_available_norms() to see all options
-norm_type = "gpt5iteration2.0"  # Options: "gpt5", "claude", "temporal_top_half", etc., or "None" for baseline
+norm_type = "static_apple_blocker"  # Options: "gpt5", "claude", "temporal_top_half", etc., or "None" for baseline
 # Epsilon settings for norm compliance (0.0 = always obey, 1.0 = always ignore)
-epsilon_all = 0.0  # Default epsilon for all agents
+epsilon_all = 0.2 
 epsilon_overrides = {}  # Per-agent overrides: {"0": 0.2, "3": 0.5}
 
 # Norm setup - dynamically load the norm using auto-discovery
