@@ -21,7 +21,7 @@ base_config = {
     "env_name": "commons_harvest__open",
     "norm_type": "sacred_apples",  # Options: "gpt5", "claude", "sacred_apples", etc., or "None"
     # Norm compliance (0.0 = always obey, 1.0 = always ignore)
-    "epsilon": 0.2,   # Remember! 80% compliance is epsilon 0.2
+    "epsilon": 0.2,   # Remember! 80% compliance is epsilon 0.2. This gets overridden by the sweep settings.
     "agent_type": "selfish",  # Options: "selfish" (more agent types coming soon)
     "num_players": 5,
     "timesteps": 500,  # Standard experiment length is 1000 timesteps.
@@ -32,9 +32,9 @@ num_simulations = 10  # Number of independent runs
 
 # Sweep settings (optional)
 # Set sweep_mode to "agent_count" or "epsilon" to run a sweep.
-sweep_mode = None  # Options: None, "agent_count", "epsilon"
+sweep_mode = "epsilon"  # Options: None, "agent_count", "epsilon"
 sweep_agent_counts = [3, 5, 7]
-sweep_epsilons = [0.0, 0.2, 0.5, 0.8]
+sweep_epsilons = [0.2, 0.4, 0.6]
 
 # Random seed settings (optional)
 use_seeds = False  # Set to True if runs look too similar (adds reproducibility)
